@@ -65,4 +65,8 @@ public class Sessao {
     public Integer getVagasDisponiveis() {
         return vagasDisponiveis;
     }
+
+    public void diminuirVaga() {
+        vagasDisponiveis = vagasDisponiveis - 1;
+    }
 }

@@ -5,10 +5,10 @@ Projeto de microsservicos para uma plataforma de catalogo musical e sessoes de a
 ## Servicos
 
 - `catalogo-service`: consulta artistas, generos e albuns.
-- `sessoes-service`: cria e consulta locais e sessoes de audicao.
+- `sessoes-service`: cria locais, sessoes de audicao e reservas de vagas.
 
-Cada servico tem seu proprio banco PostgreSQL. A comunicacao entre servicos e
-as reservas ainda serao adicionadas nas proximas etapas.
+Cada servico tem seu proprio banco PostgreSQL. A comunicacao entre servicos
+sera adicionada nas proximas etapas.
 
 ## Como executar
 
@@ -73,9 +73,40 @@ curl -X POST http://localhost:8082/sessoes \
 Uma sessao nova com capacidade 10 comeca com 10 vagas disponiveis.
 Os locais e uma sessao de exemplo sao adicionados na primeira execucao.
 
+## Reservas
+
+- `POST http://localhost:8082/sessoes/1/reservas`: reserva uma vaga
+- `GET http://localhost:8082/sessoes/1/reservas`: lista reservas da sessao
+
+Exemplo de reserva:
+
+```bash
+curl -i -X POST http://localhost:8082/sessoes/1/reservas \
+  -H "Content-Type: application/json" \
+  -d '{"nomeCliente":"Ana"}'
+```
+
+Quando ainda existem vagas, retorna HTTP 201. Quando acabou, retorna 409.
+O `ReservaService` usa uma transacao e um bloqueio na linha da sessao
+(`PESSIMISTIC_WRITE`). Assim, com apenas uma vaga, duas tentativas feitas
+ao mesmo tempo nao conseguem reservar a mesma ultima vaga.
+
+Para conferir, crie uma nova sessao com capacidade 1 e use seu ID:
+
+```bash
+curl -i -X POST http://localhost:8082/sessoes/ID/reservas -H "Content-Type: application/json" -d '{"nomeCliente":"Ana"}' &
+curl -i -X POST http://localhost:8082/sessoes/ID/reservas -H "Content-Type: application/json" -d '{"nomeCliente":"Bruno"}' &
+wait
+```
+
+Substitua `ID` pelo identificador da sessao criada. Uma requisicao deve
+retornar 201 e a outra 409. As vagas disponiveis devem ficar em zero.
+
+
 O campo `albumId` e somente o identificador do album no catalogo. A validacao
 se o album realmente existe sera feita quando adicionarmos comunicacao entre
-os dois servicos. Ainda nao existe reserva nem desconto de vagas.
+os dois servicos. Agora existe reserva com desconto de vagas, mas ainda nao validamos o album
+no outro servico.
 
 ## Configuracao e persistencia
 
@@ -96,5 +127,7 @@ PostgreSQL real, pois o enunciado pede uma dependencia real isolada.
 
 ## O que falta
 
-Reservas, controle de concorrencia, comunicacao entre servicos,
-tratamento de falhas, processamento assincrono e empacotamento em Docker.
+Comunicacao entre servicos, tratamento de falhas, processamento assincrono,
+teste com PostgreSQL real e empacotamento dos microsservicos em Docker.
+Ainda nao existe autenticacao de usuarios nem regra para impedir mais de uma
+reserva pelo mesmo nome. Este e um projeto didatico.
