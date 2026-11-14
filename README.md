@@ -4,34 +4,37 @@ Projeto de microsservicos para uma plataforma de catalogo musical e sessoes de a
 
 ## Servicos
 
-- `catalogo-service`: consulta artistas, generos e albuns. Usa PostgreSQL.
-- `sessoes-service`: estrutura inicial, sem reservas por enquanto.
+- `catalogo-service`: consulta artistas, generos e albuns.
+- `sessoes-service`: cria e consulta locais e sessoes de audicao.
 
-O projeto usa Spring Boot, Java 17, Maven e PostgreSQL. Ainda nao existe comunicacao entre os servicos.
+Cada servico tem seu proprio banco PostgreSQL. A comunicacao entre servicos e
+as reservas ainda serao adicionadas nas proximas etapas.
 
 ## Como executar
 
 Requisitos: Java 17 ou superior, Maven e Docker com Compose.
 
-Na pasta principal, iniciar o banco de dados:
+Na pasta principal do projeto:
 
 ```bash
 docker compose up -d
+mvn test
 ```
 
-O PostgreSQL usa a porta 5434 do computador, para diminuir conflitos com outros projetos.
-
-Em um terminal, iniciar o catalogo:
+Para iniciar o catalogo, em um terminal:
 
 ```bash
 mvn -pl catalogo-service spring-boot:run
 ```
 
-Em outro terminal, iniciar as sessoes:
+Para iniciar as sessoes, em outro terminal:
 
 ```bash
 mvn -pl sessoes-service spring-boot:run
 ```
+
+O catalogo usa a porta `8081` e o servico de sessoes usa a `8082`.
+Os bancos PostgreSQL ficam nas portas `5434` (catalogo) e `5435` (sessoes).
 
 ## Consultas do catalogo
 
@@ -41,15 +44,46 @@ mvn -pl sessoes-service spring-boot:run
 - `GET http://localhost:8081/albuns`
 - `GET http://localhost:8081/albuns/1`
 - `GET http://localhost:8081/albuns?titulo=kind`
-- `GET http://localhost:8082/sessoes` (retorna lista vazia nesta etapa)
 
-A primeira execucao do catalogo cria exemplos de artistas, generos e albuns.
-Nas execucoes seguintes, o banco preserva os dados gravados. O Docker usa
-um volume para manter os dados mesmo quando o container e reiniciado.
+## Locais e sessoes
 
-Para mudar conexao, usuario e senha do banco use as variaveis de ambiente
-`DB_URL`, `DB_USER` e `DB_PASSWORD`. A porta do catalogo pode ser alterada
-com `PORT`. As credenciais usadas no arquivo Compose sao apenas locais.
+- `GET http://localhost:8082/locais`
+- `GET http://localhost:8082/locais/1`
+- `POST http://localhost:8082/locais`
+- `GET http://localhost:8082/sessoes`
+- `GET http://localhost:8082/sessoes/1`
+- `POST http://localhost:8082/sessoes`
+
+Para criar um local:
+
+```bash
+curl -X POST http://localhost:8082/locais \
+  -H "Content-Type: application/json" \
+  -d '{"nome":"Loja de Discos","endereco":"Rua Exemplo, 10"}'
+```
+
+Para criar uma sessao com 10 vagas no local de id 1:
+
+```bash
+curl -X POST http://localhost:8082/sessoes \
+  -H "Content-Type: application/json" \
+  -d '{"albumId":1,"localId":1,"data":"2026-11-28","horario":"19:00","capacidade":10}'
+```
+
+Uma sessao nova com capacidade 10 comeca com 10 vagas disponiveis.
+Os locais e uma sessao de exemplo sao adicionados na primeira execucao.
+
+O campo `albumId` e somente o identificador do album no catalogo. A validacao
+se o album realmente existe sera feita quando adicionarmos comunicacao entre
+os dois servicos. Ainda nao existe reserva nem desconto de vagas.
+
+## Configuracao e persistencia
+
+- Os dois bancos usam volumes Docker diferentes, para manter dados apos reinicio.
+- As variaveis `DB_URL`, `DB_USER` e `DB_PASSWORD` podem mudar a conexao de
+  cada servico, conforme o ambiente em que ele e iniciado.
+- O banco usa `ddl-auto=update` apenas para facilitar a atividade.
+- As senhas no `compose.yaml` servem somente para desenvolvimento local.
 
 ## Testes
 
@@ -57,14 +91,10 @@ com `PORT`. As credenciais usadas no arquivo Compose sao apenas locais.
 mvn test
 ```
 
-Os testes do catalogo usam H2, um banco em memoria. O PostgreSQL real sera
-usado nos testes de integracao de uma etapa futura.
+Os testes automatizados usam H2. Mais adiante sera incluido um teste com
+PostgreSQL real, pois o enunciado pede uma dependencia real isolada.
 
-## Limitacoes atuais
+## O que falta
 
-- Apenas consultas HTTP, com dados de exemplo; sem cadastro pela API.
-- Configuracao JPA `ddl-auto=update` usada para simplificar o trabalho escolar;
-  uma aplicacao em producao normalmente precisaria de migrations.
-- As entidades sao retornadas diretamente nas respostas da API.
-- Faltam sessoes reais, reservas, concorrencia, comunicacao, resiliência,
-  empacotamento dos microsservicos em Docker e testes com PostgreSQL real.
+Reservas, controle de concorrencia, comunicacao entre servicos,
+tratamento de falhas, processamento assincrono e empacotamento em Docker.
