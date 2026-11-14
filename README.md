@@ -13,15 +13,43 @@ O endereco do catalogo e configurado pela variavel `CATALOGO_URL`.
 
 ## Como executar
 
-Requisitos: Java 17 ou superior, Maven e Docker com Compose.
+Requisitos: Docker com Docker Compose para executar tudo de forma reproduzivel.
+Para desenvolver fora do Docker, use Java 17 ou superior e Maven.
 
-Na pasta principal do projeto:
+Na pasta principal, os dois bancos e os dois microsservicos sobem juntos:
 
 ```bash
-docker compose up -d
-mvn test
+docker compose up --build -d
+docker compose ps
 ```
 
+O primeiro comando constroi os arquivos jar e as imagens dos microsservicos.
+O segundo mostra quais containers estao ativos e se estao saudaveis.
+O inicio pode demorar porque o Maven precisa baixar as dependencias.
+
+Para testar rapidamente:
+
+```bash
+curl http://localhost:8081/artistas
+curl http://localhost:8082/sessoes
+curl http://localhost:8081/actuator/health
+curl http://localhost:8082/actuator/health
+```
+
+Para ver os logs:
+
+```bash
+docker compose logs --tail=60 catalogo sessoes
+```
+
+Para interromper o ambiente sem apagar os dados:
+
+```bash
+docker compose down
+```
+
+Para executar com Maven fora do Docker, primeiro inicie os bancos com
+`docker compose up -d postgres postgres-sessoes`.
 Para iniciar o catalogo, em um terminal:
 
 ```bash
@@ -36,6 +64,10 @@ mvn -pl sessoes-service spring-boot:run
 
 O catalogo usa a porta `8081` e o servico de sessoes usa a `8082`.
 Os bancos PostgreSQL ficam nas portas `5434` (catalogo) e `5435` (sessoes).
+No Docker, os servicos se comunicam pelos nomes `catalogo`, `postgres`
+e `postgres-sessoes`, sem colocar IPs fixos no Java.
+Os nomes de porta publicados podem ser mudados pelas variaveis
+`CATALOGO_PORT`, `SESSOES_PORT`, `POSTGRES_PORT` e `SESSOES_POSTGRES_PORT`.
 
 ## Consultas do catalogo
 
@@ -149,16 +181,51 @@ de notificacao; nao envia email nem mensagem real.
 
 ## Testes
 
+Com Java e Maven instalados:
+
 ```bash
 mvn test
 ```
+
+Tambem e possivel executar os testes usando a imagem do Maven:
+
+```bash
+docker run --rm -v "$PWD":/app -w /app maven:3.9.11-eclipse-temurin-17 mvn test
+```
+
+Os Dockerfiles usam `-DskipTests` apenas durante a criacao das imagens.
+Isso nao substitui os testes, que precisam ser executados separadamente.
+
+## Reinicio e saude
+
+Os containers das aplicacoes usam `restart: unless-stopped`, o que ajuda a
+reiniciar a aplicacao depois de uma falha do processo. Os endpoints
+`/actuator/health` permitem verificar se uma instancia responde.
+Isso nao equivale a um orquestrador que recrie containers automaticamente.
+
+Para simular indisponibilidade do catalogo:
+
+```bash
+docker compose stop catalogo
+curl -i http://localhost:8082/sessoes/1
+curl -i http://localhost:8082/sessoes/1/detalhes
+docker compose up -d catalogo
+```
+
+O banco de sessoes e independente do banco do catalogo, por isso a consulta
+basica de sessoes deve continuar funcionando com o catalogo desligado.
+
+Docker Compose simples ainda nao distribui requisicoes entre varias instancias,
+pois as portas sao publicadas diretamente por cada servico.
+Isso exigiria balanceador separado, que ainda nao foi implementado.
 
 Os testes automatizados usam H2. Mais adiante sera incluido um teste com
 PostgreSQL real, pois o enunciado pede uma dependencia real isolada.
 
 ## O que falta
 
-Teste com PostgreSQL real, empacotamento dos microsservicos em Docker,
-balanceamento de carga e recuperacao automatica ainda precisam de trabalho.
+Teste automatizado com PostgreSQL real, balanceamento de carga entre replicas
+e automacao de validacao/deploy ainda precisam de trabalho. A configuracao
+Docker precisa ser executada e verificada em uma maquina com Docker.
 Ainda nao existe autenticacao de usuarios nem regra para impedir mais de uma
 reserva pelo mesmo nome. Este e um projeto didatico.
