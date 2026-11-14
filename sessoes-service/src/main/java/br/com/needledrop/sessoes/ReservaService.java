@@ -2,6 +2,7 @@ package br.com.needledrop.sessoes;
 
 import java.util.List;
 import org.springframework.http.HttpStatus;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
@@ -10,10 +11,13 @@ import org.springframework.web.server.ResponseStatusException;
 public class ReservaService {
     private final SessaoRepository sessaoRepository;
     private final ReservaRepository reservaRepository;
+    private final ApplicationEventPublisher eventos;
 
-    public ReservaService(SessaoRepository sessaoRepository, ReservaRepository reservaRepository) {
+    public ReservaService(SessaoRepository sessaoRepository, ReservaRepository reservaRepository,
+                          ApplicationEventPublisher eventos) {
         this.sessaoRepository = sessaoRepository;
         this.reservaRepository = reservaRepository;
+        this.eventos = eventos;
     }
 
     @Transactional
@@ -34,7 +38,9 @@ public class ReservaService {
         sessaoRepository.save(sessao);
 
         Reserva reserva = new Reserva(dados.getNomeCliente().trim(), sessao);
-        return reservaRepository.save(reserva);
+        Reserva salva = reservaRepository.save(reserva);
+        eventos.publishEvent(new ReservaConfirmada(salva.getId(), salva.getNomeCliente()));
+        return salva;
     }
 
     public List<Reserva> listar(Long sessaoId) {

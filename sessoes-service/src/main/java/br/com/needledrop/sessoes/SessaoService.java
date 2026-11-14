@@ -35,6 +35,21 @@ public class SessaoService {
         return catalogoClient.buscarAlbum(sessao.getAlbumId());
     }
 
+    // Se o catalogo estiver fora, retorna a sessao sem os dados do album.
+    public DetalhesSessao detalhes(Long id) {
+        Sessao sessao = sessaoRepository.findById(id)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Sessao nao encontrada"));
+        try {
+            AlbumInfo album = catalogoClient.buscarAlbum(sessao.getAlbumId());
+            return new DetalhesSessao(sessao, album, null);
+        } catch (ResponseStatusException erro) {
+            if (erro.getStatusCode().value() == 503) {
+                return new DetalhesSessao(sessao, null, "Dados do album indisponiveis no momento");
+            }
+            throw erro;
+        }
+    }
+
     @Transactional
     public Sessao criar(NovaSessaoRequest dados) {
         if (dados.getAlbumId() == null || dados.getAlbumId() <= 0

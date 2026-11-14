@@ -19,20 +19,26 @@ public class CatalogoClient {
     }
 
     public AlbumInfo buscarAlbum(Long id) {
-        try {
-            AlbumInfo album = restTemplate.getForObject(
-                    catalogoUrl + "/albuns/{id}", AlbumInfo.class, id);
-            if (album == null || album.getId() == null) {
-                throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "Resposta invalida do catalogo");
+        // Tenta uma segunda vez se houver falha temporaria na chamada HTTP.
+        for (int tentativa = 1; tentativa <= 2; tentativa++) {
+            try {
+                AlbumInfo album = restTemplate.getForObject(
+                        catalogoUrl + "/albuns/{id}", AlbumInfo.class, id);
+                if (album == null || album.getId() == null) {
+                    throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "Resposta invalida do catalogo");
+                }
+                return album;
+            } catch (HttpClientErrorException erro) {
+                if (erro.getStatusCode().value() == 404) {
+                    throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Album nao encontrado no catalogo");
+                }
+                throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "Falha na consulta ao catalogo");
+            } catch (RestClientException erro) {
+                if (tentativa == 2) {
+                    throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "Catalogo indisponivel");
+                }
             }
-            return album;
-        } catch (HttpClientErrorException erro) {
-            if (erro.getStatusCode().value() == 404) {
-                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Album nao encontrado no catalogo");
-            }
-            throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "Falha na consulta ao catalogo");
-        } catch (RestClientException erro) {
-            throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "Catalogo indisponivel");
         }
+        throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "Catalogo indisponivel");
     }
 }

@@ -119,6 +119,26 @@ class SessaoApiTest {
     }
 
     @Test
+    void deveRetornarDetalhesDaSessao() throws Exception {
+        when(catalogoClient.buscarAlbum(1L)).thenReturn(new AlbumInfo(1L, "Kind of Blue", 1959));
+        mockMvc.perform(get("/sessoes/1/detalhes"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.sessao.albumId").value(1))
+                .andExpect(jsonPath("$.album.titulo").value("Kind of Blue"));
+    }
+
+    @Test
+    void deveRetornarDetalhesBasicosSeCatalogoFalhar() throws Exception {
+        when(catalogoClient.buscarAlbum(1L))
+                .thenThrow(new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "Sem conexao"));
+        mockMvc.perform(get("/sessoes/1/detalhes"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.sessao.albumId").value(1))
+                .andExpect(jsonPath("$.album").doesNotExist())
+                .andExpect(jsonPath("$.aviso").isNotEmpty());
+    }
+
+    @Test
     void deveRetornar404ParaSessaoInexistente() throws Exception {
         mockMvc.perform(get("/sessoes/999"))
                 .andExpect(status().isNotFound());

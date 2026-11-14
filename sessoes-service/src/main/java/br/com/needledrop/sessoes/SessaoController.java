@@ -29,6 +29,11 @@ public class SessaoController {
         return ResponseEntity.of(sessaoService.buscarPorId(id));
     }
 
+    @GetMapping("/{id}/detalhes")
+    public DetalhesSessao detalhes(@PathVariable Long id) {
+        return sessaoService.detalhes(id);
+    }
+
     @GetMapping("/{id}/album")
     public AlbumInfo consultarAlbum(@PathVariable Long id) {
         return sessaoService.consultarAlbum(id);

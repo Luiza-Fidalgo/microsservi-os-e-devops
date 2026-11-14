@@ -55,6 +55,7 @@ Os bancos PostgreSQL ficam nas portas `5434` (catalogo) e `5435` (sessoes).
 - `GET http://localhost:8082/sessoes/1`
 - `POST http://localhost:8082/sessoes`
 - `GET http://localhost:8082/sessoes/1/album`: busca o album no catalogo
+- `GET http://localhost:8082/sessoes/1/detalhes`: consulta sessao e tenta trazer album
 
 Para criar um local:
 
@@ -125,7 +126,18 @@ para continuar os testes. Se executar em outro endereco, configure
 A chamada HTTP e sincrona, usando `RestTemplate`. O codigo Java nao possui
 porta nem endereco fixo do catalogo. A configuracao local usa `localhost:8081`.
 Os tempos de conexao e resposta sao limitados a 2 e 3 segundos, respectivamente.
-O tratamento mais completo de falhas sera implementado no proximo bloco.
+Para falhas de conexao ou resposta do servidor, o cliente agora tenta uma
+segunda chamada HTTP antes de retornar 503. Para um album inexistente (404),
+nao repete a chamada, porque nao e um problema temporario.
+
+Em `/sessoes/1/detalhes`, se o catalogo estiver fora, o sistema devolve os
+dados da sessao, `album: null` e um aviso, em vez de falhar a consulta inteira.
+Essa e uma resposta alternativa (fallback). O limite de tempo da chamada ja
+foi configurado anteriormente no HttpConfig.
+
+Quando uma reserva e confirmada, a aplicacao registra um aviso no log de forma
+assincrona (`@Async`), depois do commit da transacao. E apenas uma simulacao
+de notificacao; nao envia email nem mensagem real.
 
 ## Configuracao e persistencia
 
@@ -146,8 +158,7 @@ PostgreSQL real, pois o enunciado pede uma dependencia real isolada.
 
 ## O que falta
 
-Melhorar resiliencia (resposta alternativa e tratamento de falhas),
-processamento assincrono, teste com PostgreSQL real e empacotamento dos
-microsservicos em Docker.
+Teste com PostgreSQL real, empacotamento dos microsservicos em Docker,
+balanceamento de carga e recuperacao automatica ainda precisam de trabalho.
 Ainda nao existe autenticacao de usuarios nem regra para impedir mais de uma
 reserva pelo mesmo nome. Este e um projeto didatico.
