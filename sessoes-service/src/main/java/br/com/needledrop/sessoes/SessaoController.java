@@ -29,6 +29,11 @@ public class SessaoController {
         return ResponseEntity.of(sessaoService.buscarPorId(id));
     }
 
+    @GetMapping("/{id}/album")
+    public AlbumInfo consultarAlbum(@PathVariable Long id) {
+        return sessaoService.consultarAlbum(id);
+    }
+
     @PostMapping
     public ResponseEntity<Sessao> criar(@RequestBody NovaSessaoRequest dados) {
         Sessao sessao = sessaoService.criar(dados);

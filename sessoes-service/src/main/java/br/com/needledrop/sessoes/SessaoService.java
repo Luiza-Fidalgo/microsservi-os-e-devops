@@ -12,10 +12,13 @@ import org.springframework.web.server.ResponseStatusException;
 public class SessaoService {
     private final SessaoRepository sessaoRepository;
     private final LocalRepository localRepository;
+    private final CatalogoClient catalogoClient;
 
-    public SessaoService(SessaoRepository sessaoRepository, LocalRepository localRepository) {
+    public SessaoService(SessaoRepository sessaoRepository, LocalRepository localRepository,
+                         CatalogoClient catalogoClient) {
         this.sessaoRepository = sessaoRepository;
         this.localRepository = localRepository;
+        this.catalogoClient = catalogoClient;
     }
 
     public List<Sessao> listar() {
@@ -24,6 +27,12 @@ public class SessaoService {
 
     public Optional<Sessao> buscarPorId(Long id) {
         return sessaoRepository.findById(id);
+    }
+
+    public AlbumInfo consultarAlbum(Long sessaoId) {
+        Sessao sessao = sessaoRepository.findById(sessaoId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Sessao nao encontrada"));
+        return catalogoClient.buscarAlbum(sessao.getAlbumId());
     }
 
     @Transactional
@@ -37,6 +46,9 @@ public class SessaoService {
 
         Local local = localRepository.findById(dados.getLocalId())
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Local nao encontrado"));
+
+        // Confere se o album existe no outro microsservico.
+        catalogoClient.buscarAlbum(dados.getAlbumId());
 
         Sessao sessao = new Sessao(dados.getAlbumId(), local, dados.getData(),
                 dados.getHorario(), dados.getCapacidade());

@@ -5,6 +5,11 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.MediaType;
+import org.springframework.http.HttpStatus;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
+import org.springframework.web.server.ResponseStatusException;
+
+import static org.mockito.Mockito.when;
 import org.springframework.test.web.servlet.MockMvc;
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -17,6 +22,9 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 class SessaoApiTest {
     @Autowired
     private MockMvc mockMvc;
+
+    @MockitoBean
+    private CatalogoClient catalogoClient;
 
     @Test
     void deveListarLocais() throws Exception {
@@ -36,6 +44,7 @@ class SessaoApiTest {
 
     @Test
     void deveCriarSessaoComVagasIniciais() throws Exception {
+        when(catalogoClient.buscarAlbum(1L)).thenReturn(new AlbumInfo(1L, "Kind of Blue", 1959));
         String json = """
                 {"albumId":1,"localId":1,"data":"2026-11-27","horario":"18:30","capacidade":5}
                 """;
@@ -67,6 +76,46 @@ class SessaoApiTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(json))
                 .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void deveRecusarAlbumQueNaoExiste() throws Exception {
+        when(catalogoClient.buscarAlbum(999L))
+                .thenThrow(new ResponseStatusException(HttpStatus.BAD_REQUEST, "Album nao encontrado"));
+        String json = """
+                {"albumId":999,"localId":1,"data":"2026-11-27","horario":"18:30","capacidade":5}
+                """;
+        mockMvc.perform(post("/sessoes")
+                        .contentType(MediaType.APPLICATION_JSON).content(json))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void deveConsultarAlbumDaSessao() throws Exception {
+        when(catalogoClient.buscarAlbum(1L)).thenReturn(new AlbumInfo(1L, "Kind of Blue", 1959));
+        mockMvc.perform(get("/sessoes/1/album"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.titulo").value("Kind of Blue"));
+    }
+
+    @Test
+    void deveConsultarSessaoMesmoSemCatalogo() throws Exception {
+        // A consulta da sessao usa somente o banco deste microsservico.
+        mockMvc.perform(get("/sessoes/1"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.albumId").value(1));
+    }
+
+    @Test
+    void deveRetornar503SeCatalogoEstiverFora() throws Exception {
+        when(catalogoClient.buscarAlbum(1L))
+                .thenThrow(new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "Catalogo indisponivel"));
+        String json = """
+                {"albumId":1,"localId":1,"data":"2026-11-27","horario":"18:30","capacidade":5}
+                """;
+        mockMvc.perform(post("/sessoes")
+                        .contentType(MediaType.APPLICATION_JSON).content(json))
+                .andExpect(status().isServiceUnavailable());
     }
 
     @Test

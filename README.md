@@ -7,8 +7,9 @@ Projeto de microsservicos para uma plataforma de catalogo musical e sessoes de a
 - `catalogo-service`: consulta artistas, generos e albuns.
 - `sessoes-service`: cria locais, sessoes de audicao e reservas de vagas.
 
-Cada servico tem seu proprio banco PostgreSQL. A comunicacao entre servicos
-sera adicionada nas proximas etapas.
+Cada servico tem seu proprio banco PostgreSQL. Ao criar uma sessao, o servico
+de sessoes consulta o catalogo por HTTP para confirmar que o album existe.
+O endereco do catalogo e configurado pela variavel `CATALOGO_URL`.
 
 ## Como executar
 
@@ -53,6 +54,7 @@ Os bancos PostgreSQL ficam nas portas `5434` (catalogo) e `5435` (sessoes).
 - `GET http://localhost:8082/sessoes`
 - `GET http://localhost:8082/sessoes/1`
 - `POST http://localhost:8082/sessoes`
+- `GET http://localhost:8082/sessoes/1/album`: busca o album no catalogo
 
 Para criar um local:
 
@@ -103,10 +105,27 @@ Substitua `ID` pelo identificador da sessao criada. Uma requisicao deve
 retornar 201 e a outra 409. As vagas disponiveis devem ficar em zero.
 
 
-O campo `albumId` e somente o identificador do album no catalogo. A validacao
-se o album realmente existe sera feita quando adicionarmos comunicacao entre
-os dois servicos. Agora existe reserva com desconto de vagas, mas ainda nao validamos o album
-no outro servico.
+O campo `albumId` identifica o album no catalogo. Ao criar uma sessao,
+`CatalogoClient` consulta `GET /albuns/{id}` no outro servico. Se o album nao
+existe, a API de sessoes retorna 400 e nao salva a nova sessao. Se o catalogo
+estiver indisponivel, retorna 503. As consultas basicas de sessoes ja salvas
+continuam funcionando, pois usam apenas o banco do proprio servico.
+
+Para testar a comunicacao, mantenha os dois servicos ligados e execute:
+
+```bash
+curl -i http://localhost:8082/sessoes/1/album
+```
+
+Depois, desligue o catalogo. `GET /sessoes/1` deve continuar respondendo,
+enquanto `/sessoes/1/album` deve retornar 503. Inicie o catalogo novamente
+para continuar os testes. Se executar em outro endereco, configure
+`CATALOGO_URL` antes de iniciar o servico de sessoes (sem barra final).
+
+A chamada HTTP e sincrona, usando `RestTemplate`. O codigo Java nao possui
+porta nem endereco fixo do catalogo. A configuracao local usa `localhost:8081`.
+Os tempos de conexao e resposta sao limitados a 2 e 3 segundos, respectivamente.
+O tratamento mais completo de falhas sera implementado no proximo bloco.
 
 ## Configuracao e persistencia
 
@@ -127,7 +146,8 @@ PostgreSQL real, pois o enunciado pede uma dependencia real isolada.
 
 ## O que falta
 
-Comunicacao entre servicos, tratamento de falhas, processamento assincrono,
-teste com PostgreSQL real e empacotamento dos microsservicos em Docker.
+Melhorar resiliencia (resposta alternativa e tratamento de falhas),
+processamento assincrono, teste com PostgreSQL real e empacotamento dos
+microsservicos em Docker.
 Ainda nao existe autenticacao de usuarios nem regra para impedir mais de uma
 reserva pelo mesmo nome. Este e um projeto didatico.
