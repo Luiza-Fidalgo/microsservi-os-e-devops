@@ -1,42 +1,55 @@
 # NeedleDrop
 
-Projeto da disciplina de microsservicos. A aplicacao sera uma plataforma de catalogo musical e sessoes de audicao.
+Projeto de microsservicos para uma plataforma de catalogo musical e sessoes de audicao.
 
-## Estrutura inicial
+## Servicos
 
-- `catalogo-service`: consulta de artistas e futuramente de albuns.
-- `sessoes-service`: gerencia sessoes e reservas (ainda em desenvolvimento).
+- `catalogo-service`: consulta artistas, generos e albuns. Usa PostgreSQL.
+- `sessoes-service`: estrutura inicial, sem reservas por enquanto.
 
-Os dois servicos sao projetos Spring Boot separados.
-
-## Requisitos
-
-- Java 17 ou superior
-- Maven 3.6.3 ou superior
+O projeto usa Spring Boot, Java 17, Maven e PostgreSQL. Ainda nao existe comunicacao entre os servicos.
 
 ## Como executar
 
-Abra dois terminais na pasta do projeto.
+Requisitos: Java 17 ou superior, Maven e Docker com Compose.
 
-Terminal 1:
+Na pasta principal, iniciar o banco de dados:
+
+```bash
+docker compose up -d
+```
+
+O PostgreSQL usa a porta 5434 do computador, para diminuir conflitos com outros projetos.
+
+Em um terminal, iniciar o catalogo:
 
 ```bash
 mvn -pl catalogo-service spring-boot:run
 ```
 
-Terminal 2:
+Em outro terminal, iniciar as sessoes:
 
 ```bash
 mvn -pl sessoes-service spring-boot:run
 ```
 
-O catalogo usa a porta 8081 e as sessoes usam a 8082.
-
-## Endpoints desta etapa
+## Consultas do catalogo
 
 - `GET http://localhost:8081/artistas`
 - `GET http://localhost:8081/artistas/1`
-- `GET http://localhost:8082/sessoes` (por enquanto retorna uma lista vazia)
+- `GET http://localhost:8081/generos`
+- `GET http://localhost:8081/albuns`
+- `GET http://localhost:8081/albuns/1`
+- `GET http://localhost:8081/albuns?titulo=kind`
+- `GET http://localhost:8082/sessoes` (retorna lista vazia nesta etapa)
+
+A primeira execucao do catalogo cria exemplos de artistas, generos e albuns.
+Nas execucoes seguintes, o banco preserva os dados gravados. O Docker usa
+um volume para manter os dados mesmo quando o container e reiniciado.
+
+Para mudar conexao, usuario e senha do banco use as variaveis de ambiente
+`DB_URL`, `DB_USER` e `DB_PASSWORD`. A porta do catalogo pode ser alterada
+com `PORT`. As credenciais usadas no arquivo Compose sao apenas locais.
 
 ## Testes
 
@@ -44,9 +57,14 @@ O catalogo usa a porta 8081 e as sessoes usam a 8082.
 mvn test
 ```
 
-## O que ainda falta
+Os testes do catalogo usam H2, um banco em memoria. O PostgreSQL real sera
+usado nos testes de integracao de uma etapa futura.
 
-Nesta primeira etapa os artistas estao em memoria, apenas como exemplo.
-Ainda nao foram feitos banco de dados, albuns, busca, sessoes reais,
-reservas, comunicacao entre servicos, controle de concorrencia e Docker.
-Essas funcionalidades serao adicionadas aos poucos.
+## Limitacoes atuais
+
+- Apenas consultas HTTP, com dados de exemplo; sem cadastro pela API.
+- Configuracao JPA `ddl-auto=update` usada para simplificar o trabalho escolar;
+  uma aplicacao em producao normalmente precisaria de migrations.
+- As entidades sao retornadas diretamente nas respostas da API.
+- Faltam sessoes reais, reservas, concorrencia, comunicacao, resiliência,
+  empacotamento dos microsservicos em Docker e testes com PostgreSQL real.

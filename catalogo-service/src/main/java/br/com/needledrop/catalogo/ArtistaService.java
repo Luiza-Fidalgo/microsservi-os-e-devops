@@ -1,24 +1,23 @@
 package br.com.needledrop.catalogo;
 
-import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
+import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 
 @Service
 public class ArtistaService {
-    private final List<Artista> artistas = Arrays.asList(
-        new Artista(1L, "Miles Davis"),
-        new Artista(2L, "Nina Simone")
-    );
+    private final ArtistaRepository artistaRepository;
+
+    public ArtistaService(ArtistaRepository artistaRepository) {
+        this.artistaRepository = artistaRepository;
+    }
 
     public List<Artista> listar() {
-        return artistas;
+        return artistaRepository.findAll(Sort.by("id"));
     }
 
     public Optional<Artista> buscarPorId(Long id) {
-        return artistas.stream()
-                .filter(artista -> artista.getId().equals(id))
-                .findFirst();
+        return artistaRepository.findById(id);
     }
 }
