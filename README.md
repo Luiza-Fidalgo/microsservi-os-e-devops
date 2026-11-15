@@ -171,6 +171,44 @@ Quando uma reserva e confirmada, a aplicacao registra um aviso no log de forma
 assincrona (`@Async`), depois do commit da transacao. E apenas uma simulacao
 de notificacao; nao envia email nem mensagem real.
 
+## Validacao do projeto
+
+Os testes normais usam H2 e nao precisam iniciar o Docker:
+
+```bash
+mvn test
+```
+
+Tambem existe um teste com **PostgreSQL real** usando Testcontainers.
+Ele inicia um banco temporario e verifica a gravacao da reserva e duas
+reservas simultaneas para a ultima vaga. Precisa do Docker em execucao:
+
+```bash
+mvn -pl sessoes-service -am -Pintegracao verify
+```
+
+O teste de integracao se chama `ReservaPostgresIT`. Ele nao usa o PostgreSQL
+do Compose: cria um banco isolado para o teste e o encerra ao terminar.
+Os testes normais sao executados antes dele pelo Maven.
+
+Para verificar a aplicacao HTTP completa, execute os containers:
+
+```bash
+docker compose up --build -d
+docker compose ps
+curl -i http://localhost:8081/albuns
+curl -i http://localhost:8082/sessoes
+curl -i http://localhost:8082/sessoes/1/detalhes
+```
+
+Teste tambem uma nova sessao com uma vaga, duas reservas e a consulta final
+de vagas. A primeira reserva deve responder `201` e a seguinte `409`.
+O resultado precisa ser conferido no terminal, nao apenas no codigo.
+
+Se os testes falharem, confira os logs do Maven e do Docker antes da entrega.
+Se o Docker nao estiver ativo, o teste com Testcontainers nao conseguira
+iniciar o PostgreSQL.
+
 ## Configuracao e persistencia
 
 - Os dois bancos usam volumes Docker diferentes, para manter dados apos reinicio.
@@ -219,8 +257,8 @@ Docker Compose simples ainda nao distribui requisicoes entre varias instancias,
 pois as portas sao publicadas diretamente por cada servico.
 Isso exigiria balanceador separado, que ainda nao foi implementado.
 
-Os testes automatizados usam H2. Mais adiante sera incluido um teste com
-PostgreSQL real, pois o enunciado pede uma dependencia real isolada.
+Os testes normais usam H2. O teste de integracao usa PostgreSQL real
+em container temporario e precisa de Docker.
 
 ## O que falta
 
