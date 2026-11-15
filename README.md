@@ -387,16 +387,3 @@ O Maven compila, testa e gera JARs por comandos locais. Os Dockerfiles
 constroem os JARs com `-DskipTests`, portanto a construcao de imagens nao
 substitui a validacao dos testes. Nao existe pipeline executado
 automaticamente a cada push, nem entrega automatizada de artefatos aprovados.
-
-## Limitacoes conhecidas
-
-- A escala e feita manualmente usando Docker Compose e um balanceador Nginx.
-- Nao existe reposicao automatica de replicas excluidas por um orquestrador;
-  a politica de reinicio atende apenas a falhas do processo no container.
-- Nao existe pipeline de CI/CD ou validacao automatica acionada por push.
-- A notificacao assincrona apenas registra uma mensagem no log.
-- Nao ha autenticacao nem restricao de uma reserva por pessoa.
-- O healthcheck usado demonstra saude, mas nao existe controle completo de
-  readiness e retirada automatica de instancias do trafego.
-- Senhas de desenvolvimento e `ddl-auto=update` nao sao adequados para
-  producao; seriam necessarios segredos seguros e migracoes.
