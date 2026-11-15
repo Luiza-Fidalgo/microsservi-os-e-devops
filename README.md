@@ -1,6 +1,9 @@
 # NeedleDrop
 
-Projeto de microsservicos para uma plataforma de catalogo musical e sessoes de audicao.
+Projeto academico de microsservicos para uma plataforma de catalogo musical e sessoes de audicao.
+
+Este repositorio tem dois servicos Spring Boot independentes, cada um com seu
+banco PostgreSQL. O README mostra como executar o projeto, entender as decisoes e os testes.
 
 ## Servicos
 
@@ -10,6 +13,30 @@ Projeto de microsservicos para uma plataforma de catalogo musical e sessoes de a
 Cada servico tem seu proprio banco PostgreSQL. Ao criar uma sessao, o servico
 de sessoes consulta o catalogo por HTTP para confirmar que o album existe.
 O endereco do catalogo e configurado pela variavel `CATALOGO_URL`.
+
+## Arquitetura
+
+```text
+             Cliente (curl / navegador)
+                  |          |
+                  v          v
+          catalogo:8081    sessoes:8082
+                  |          |  |
+                  |          |  +-- HTTP GET /albuns/{id} --> catalogo
+                  |          |
+                  v          v
+             PostgreSQL   PostgreSQL
+              catalogo     sessoes
+```
+
+O catalogo guarda artistas, generos e albuns. O servico de sessoes guarda
+locais, sessoes, reservas e vagas. Ele consulta o catalogo por HTTP quando
+precisa validar ou mostrar o album. Os bancos sao separados; nao existe
+consulta direta entre os bancos.
+
+O codigo e organizado com controllers (recebem requisicoes), services
+(aplicam regras), repositories (consultam o banco) e entities (dados).
+O fluxo de reserva usa uma transacao e um bloqueio na linha da sessao.
 
 ## Como executar
 
@@ -260,10 +287,48 @@ Isso exigiria balanceador separado, que ainda nao foi implementado.
 Os testes normais usam H2. O teste de integracao usa PostgreSQL real
 em container temporario e precisa de Docker.
 
-## O que falta
+## Decisoes do projeto
 
-Teste automatizado com PostgreSQL real, balanceamento de carga entre replicas
-e automacao de validacao/deploy ainda precisam de trabalho. A configuracao
-Docker precisa ser executada e verificada em uma maquina com Docker.
-Ainda nao existe autenticacao de usuarios nem regra para impedir mais de uma
-reserva pelo mesmo nome. Este e um projeto didatico.
+- **Persistencia:** PostgreSQL nos dois servicos, pois os dados sao
+  relacionados (artistas, albuns, sessoes, locais e reservas). Os bancos
+  separados evitam que um servico acesse diretamente os dados internos do outro.
+  Os volumes no Docker preservam os dados apos reinicios comuns.
+- **Comunicacao:** HTTP com `RestTemplate`, pois a validacao do album precisa
+  de uma resposta imediata. O endereco vem da configuracao `CATALOGO_URL`.
+- **Resiliencia:** timeout para impedir espera indefinida; nova tentativa
+  para uma falha transitoria; resposta alternativa em `/sessoes/{id}/detalhes`
+  para consultar a sessao mesmo sem os detalhes do album.
+- **Concorrencia:** o `ReservaService` utiliza `@Transactional`, e a busca da
+  sessao em `SessaoRepository` usa `PESSIMISTIC_WRITE`. Assim, uma reserva
+  aguarda a outra terminar antes de conferir a ultima vaga.
+- **Assincrono:** o evento de reserva confirmada e tratado com `@Async`, depois
+  do commit, apenas para simular um aviso no log. Nao existe envio real.
+- **Execucao:** Docker Compose sobe os bancos e os dois servicos, com
+  `healthcheck` e `restart: unless-stopped`. Cada aplicacao possui Dockerfile.
+
+## Escalabilidade e automacao
+
+O Compose atual executa uma instancia de cada microsservico e publica suas
+portas diretamente. **Nao existe um balanceador de carga entre varias
+instancias** nem uma demonstracao de escala de 1 para 3 e de volta para 1.
+A opcao de reinicio do Docker e o endpoint de saude sao mecanismos basicos,
+mas **nao demonstram recuperacao automatica de replicas por orquestrador**.
+O projeto tambem **nao possui pipeline de build, testes e entrega acionado
+por push**. Os testes e a criacao das imagens sao feitos por comandos locais.
+
+## Limitacoes conhecidas
+
+- Ainda falta executar e registrar os resultados dos testes Maven e do Docker
+  Compose em um computador com essas ferramentas; ter arquivos de testes nao
+  comprova que estejam passando.
+- O teste `ReservaPostgresIT` com Testcontainers foi escrito, mas tambem
+  depende dessa validacao pratica. Ele precisa do Docker ativo.
+- Nao ha balanceamento, escala demonstravel, reposicao de replicas ou
+  automacao de build/testes/deploy a cada push.
+- O processamento assincrono apenas registra um log; nao envia mensagens.
+- Nao existe autenticacao nem restricao de uma reserva por pessoa.
+- Senhas locais de exemplo e `ddl-auto=update` nao sao configuracoes de
+  producao. Para producao seriam necessarias credenciais seguras e migracoes.
+
+Antes de apresentar, execute os comandos de validacao descritos acima.
+Nao marque nenhum teste como concluido sem ter obtido um resultado real.
