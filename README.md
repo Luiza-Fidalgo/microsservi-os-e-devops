@@ -280,9 +280,9 @@ docker compose up -d catalogo
 O banco de sessoes e independente do banco do catalogo, por isso a consulta
 basica de sessoes deve continuar funcionando com o catalogo desligado.
 
-Docker Compose simples ainda nao distribui requisicoes entre varias instancias,
-pois as portas sao publicadas diretamente por cada servico.
-Isso exigiria balanceador separado, que ainda nao foi implementado.
+O Compose padrao utiliza uma instancia do catalogo. Para demonstrar
+balanceamento e escala, o projeto inclui `compose.escala.yaml` e `nginx.conf`.
+Esses arquivos permitem executar varias instancias do catalogo atras do Nginx.
 
 Os testes normais usam H2. O teste de integracao usa PostgreSQL real
 em container temporario e precisa de Docker.
@@ -306,29 +306,97 @@ em container temporario e precisa de Docker.
 - **Execucao:** Docker Compose sobe os bancos e os dois servicos, com
   `healthcheck` e `restart: unless-stopped`. Cada aplicacao possui Dockerfile.
 
-## Escalabilidade e automacao
+## Escalabilidade e balanceamento
 
-O Compose atual executa uma instancia de cada microsservico e publica suas
-portas diretamente. **Nao existe um balanceador de carga entre varias
-instancias** nem uma demonstracao de escala de 1 para 3 e de volta para 1.
-A opcao de reinicio do Docker e o endpoint de saude sao mecanismos basicos,
-mas **nao demonstram recuperacao automatica de replicas por orquestrador**.
-O projeto tambem **nao possui pipeline de build, testes e entrega acionado
-por push**. Os testes e a criacao das imagens sao feitos por comandos locais.
+A configuracao normal (`compose.yaml`) continua simples, com uma instancia
+por microsservico. O arquivo adicional `compose.escala.yaml` remove a
+publicacao direta da porta do catalogo e coloca o Nginx na porta 8081.
+O Nginx encaminha chamadas para as instancias do catalogo pelo DNS interno
+do Docker. O servico de sessoes continua na porta 8082.
+
+Para demonstrar o aumento de 1 para 3 instancias:
+
+```bash
+docker compose -f compose.yaml -f compose.escala.yaml up -d --scale catalogo=3
+docker compose -f compose.yaml -f compose.escala.yaml ps
+```
+
+Para testar e visualizar os enderecos que receberam as chamadas:
+
+```bash
+for i in {1..15}; do curl -s -o /dev/null -w "HTTP %{http_code}\n" http://localhost:8081/artistas; done
+docker compose -f compose.yaml -f compose.escala.yaml logs --tail=30 balanceador
+```
+
+As requisicoes devem retornar HTTP 200 e os logs do Nginx devem mostrar
+enderecos diferentes de instancias do catalogo. O balanceamento foi verificado
+com tres destinos e as 15 chamadas respondendo HTTP 200.
+
+Para reduzir de 3 para 1 instancia, sem alterar codigo:
+
+```bash
+docker compose -f compose.yaml -f compose.escala.yaml up -d --scale catalogo=1
+docker compose -f compose.yaml -f compose.escala.yaml ps
+curl -i http://localhost:8081/artistas
+curl -i http://localhost:8082/sessoes/1/album
+```
+
+Importante: quando executar novamente o comando `up` com essa configuracao,
+informe `--scale catalogo=3` para manter tres instancias. Sem esse argumento,
+o Compose pode voltar para apenas uma instancia.
+
+Para retornar ao ambiente original:
+
+```bash
+docker compose -f compose.yaml -f compose.escala.yaml down
+docker compose up -d
+```
+
+Nao use `down -v`, pois isso apagaria os volumes dos bancos.
+
+## Recuperacao automatica e saude
+
+Os microsservicos possuem `restart: unless-stopped` e endpoint do Actuator
+em `/actuator/health`. Foi realizado um teste encerrando o processo
+principal do catalogo com `kill -TERM 1` dentro do container. O contador
+`RestartCount` passou de 0 para 1, e a API voltou a responder HTTP 200.
+Esse teste demonstra reinicio automatico do processo, mas nao reposicao
+de containers removidos por um orquestrador.
+
+## Testes realizados
+
+Os testes e as verificacoes manuais foram executados localmente em 14/11/2026:
+
+- `mvn test`: 27 testes aprovados, sem falhas.
+- `mvn -pl sessoes-service -am -Pintegracao verify`: 22 testes normais
+  do servico de sessoes e 2 de integracao com PostgreSQL do Testcontainers,
+  todos aprovados.
+- Docker Compose: dois microsservicos e dois bancos iniciados.
+- Endpoints de saude e APIs: respostas HTTP 200.
+- Criacao de sessao com album existente: HTTP 201; album inexistente: HTTP 400.
+- Duas reservas simultaneas para a ultima vaga: uma HTTP 201 e outra HTTP 409.
+- Dados preservados depois de `docker compose down` e `up`.
+- Catalogo desligado: sessao basica HTTP 200, fallback com album nulo e
+  consulta obrigatoria do album HTTP 503; catalogo recuperado depois.
+- Escalabilidade de 1 para 3 e de volta para 1 instancia; Nginx distribuiu
+  chamadas entre tres enderecos do catalogo.
+
+## Automacao
+
+O Maven compila, testa e gera JARs por comandos locais. Os Dockerfiles
+constroem os JARs com `-DskipTests`, portanto a construcao de imagens nao
+substitui a validacao dos testes. Nao existe pipeline executado
+automaticamente a cada push, nem entrega automatizada de artefatos aprovados.
 
 ## Limitacoes conhecidas
 
-- Ainda falta executar e registrar os resultados dos testes Maven e do Docker
-  Compose em um computador com essas ferramentas; ter arquivos de testes nao
-  comprova que estejam passando.
-- O teste `ReservaPostgresIT` com Testcontainers foi escrito, mas tambem
-  depende dessa validacao pratica. Ele precisa do Docker ativo.
-- Nao ha balanceamento, escala demonstravel, reposicao de replicas ou
-  automacao de build/testes/deploy a cada push.
-- O processamento assincrono apenas registra um log; nao envia mensagens.
-- Nao existe autenticacao nem restricao de uma reserva por pessoa.
-- Senhas locais de exemplo e `ddl-auto=update` nao sao configuracoes de
-  producao. Para producao seriam necessarias credenciais seguras e migracoes.
-
-Antes de apresentar, execute os comandos de validacao descritos acima.
-Nao marque nenhum teste como concluido sem ter obtido um resultado real.
+- A escala e feita manualmente usando Docker Compose e um balanceador Nginx.
+- Nao existe reposicao automatica de replicas excluidas por um orquestrador;
+  a politica de reinicio atende apenas a falhas do processo no container.
+- Nao existe pipeline de CI/CD ou validacao automatica acionada por push.
+- A notificacao assincrona apenas registra uma mensagem no log.
+- Nao ha autenticacao nem restricao de uma reserva por pessoa.
+- O healthcheck usado demonstra saude, mas nao existe controle completo de
+  readiness e retirada automatica de instancias do trafego.
+- Senhas de desenvolvimento e `ddl-auto=update` nao sao adequados para
+  producao; seriam necessarios segredos seguros e migracoes.
